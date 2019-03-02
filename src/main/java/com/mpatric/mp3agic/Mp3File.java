@@ -1,8 +1,11 @@
 package com.mpatric.mp3agic;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.*;
 import java.util.HashMap;
@@ -20,7 +23,7 @@ public class Mp3File extends FileWrapper {
 	protected int bufferLength;
 	private int xingOffset = -1;
 	private int startOffset = -1;
-	private int endOffset = -1;
+	private long endOffset = -1;
 	private int frameCount = 0;
 	private Map<Integer, MutableInteger> bitrates = new HashMap<>();
 	private int xingBitrate;
@@ -323,7 +326,7 @@ public class Mp3File extends FileWrapper {
 		return startOffset;
 	}
 
-	public int getEndOffset() {
+	public long getEndOffset() {
 		return endOffset;
 	}
 
@@ -465,27 +468,12 @@ public class Mp3File extends FileWrapper {
 	}
 
 	private void saveMpegFrames(SeekableByteChannel saveFile) throws IOException {
-		int filePos = xingOffset;
+		long filePos = xingOffset;
 		if (filePos < 0) filePos = startOffset;
 		if (filePos < 0) return;
 		if (endOffset < filePos) return;
-		ByteBuffer byteBuffer = ByteBuffer.allocate(bufferLength);
-		try (SeekableByteChannel seekableByteChannel = Files.newByteChannel(path, StandardOpenOption.READ)) {
-			seekableByteChannel.position(filePos);
-			while (true) {
-				byteBuffer.clear();
-				int bytesRead = seekableByteChannel.read(byteBuffer);
-				byteBuffer.rewind();
-				if (filePos + bytesRead <= endOffset) {
-					byteBuffer.limit(bytesRead);
-					saveFile.write(byteBuffer);
-					filePos += bytesRead;
-				} else {
-					byteBuffer.limit(endOffset - filePos + 1);
-					saveFile.write(byteBuffer);
-					break;
-				}
-			}
+		try(FileChannel channel = new FileInputStream(path.toFile()).getChannel()) {
+			channel.transferTo(filePos, (endOffset - filePos + 1), saveFile);
 		}
 	}
 }
